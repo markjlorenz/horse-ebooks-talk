@@ -14,34 +14,40 @@ func main() {
   if err != nil { }
 
   splitter := Splitter{} // Bring your friends
-  NewRobot(&splitter)    // Have a robot friend
+  AddPesterBot(&splitter)    // Have a robot friend
 
   for {
     conn, err := server.Accept()
     if err != nil { panic(err) }
-    go handle(conn, &splitter)
+    go PesterChum(&splitter).Join(conn)
   }
 }
 
 //------------------------------
 // Have a robot friend
-func NewRobot(splitter *Splitter) {
-  from_splitter := make(chan string)
-  splitter.Split(from_splitter)
+type Robot struct {
+  Chum
+  horse horse.Horse
+}
 
+func AddPesterBot(splitter *Splitter) {
+  robot      := PesterChum(splitter)
   this_horse := horse.NewHorse()
 
-  go ReadSplitter(from_splitter, func(msg string){
+  go robot.ReadSplitter(func(msg string){
     neigh := this_horse.Respond(msg)
     if len(neigh) > 0 {
-      go fmt.Fprintln(splitter, neigh) //confident Go
+      formatted_neigh := "⊚ " + neigh
+      // go robot.WriteString(formatted_neigh)
+      go fmt.Fprintln(robot, formatted_neigh) //confident Go
     }
   })
 }
 
 // Splitter is now an io.Writter
-func (s *Splitter) Write (message_bytes []byte) (int, error){
-  for _, out_pipe := range s.splits {
+func (chum *Chum) Write (message_bytes []byte) (int, error){
+  for split_id, out_pipe := range chum.splitter.splits {
+    if chum.split_id == split_id { continue }
     out_pipe <- string(message_bytes[:])
   }
   return len(message_bytes), nil
@@ -49,24 +55,41 @@ func (s *Splitter) Write (message_bytes []byte) (int, error){
 
 //------------------------------
 // Bring your friends to the party
-func handle(conn net.Conn, splitter *Splitter) {
-  from_splitter := make(chan string)
-  splitter.Split(from_splitter)
+type Chum struct {
+  split_id      int
+  splitter      *Splitter
+  from_splitter chan string
+}
 
-  go ReadSplitter(from_splitter, func(msg string){
+func PesterChum(splitter *Splitter) (chum *Chum) {
+  chum                              = &Chum{}
+  chum.splitter                     = splitter
+  chum.split_id, chum.from_splitter = splitter.Split()
+  return // go knows to return `chum`
+}
+
+func (chum *Chum) Join(conn net.Conn) {
+  go chum.ReadSplitter(func(msg string){
     fmt.Fprint(conn, msg)
   })
 
   for {
     reader  := bufio.NewReader(conn)
     line, _ := reader.ReadString('\n')
-    splitter.WriteString(line)
+    chum.WriteString(line)
     fmt.Print(line)
   }
 }
 
-func ReadSplitter (from_splitter chan string, block func(msg string)) {
-  for msg := range from_splitter {
+func (chum *Chum) WriteString(message string) {
+  for split_id, out_pipe := range chum.splitter.splits {
+    if chum.split_id == split_id { continue }
+    out_pipe <- message
+  }
+}
+
+func (chum *Chum) ReadSplitter(block func(msg string)) {
+  for msg := range chum.from_splitter {
     block(msg)
   }
 }
@@ -75,14 +98,12 @@ type Splitter struct {
   splits []chan string
 }
 
-func (s *Splitter) Split (c chan string) {
-  s.splits = append(s.splits, c)
-}
+func (s *Splitter) Split() (split_id int, from_splitter chan string) {
+  from_splitter = make(chan string)
 
-func (s *Splitter) WriteString (message string) {
-  for _, out_pipe := range s.splits {
-    out_pipe <- message
-  }
+  s.splits = append(s.splits, from_splitter)
+  split_id = len(s.splits) - 1
+  return
 }
 
 // ------------------------------
