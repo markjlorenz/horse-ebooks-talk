@@ -7,14 +7,16 @@ import (
   "./horse"
 )
 
+// Horse-eChat
+// Did you turn devmotron into horse e-books?!
 func main() {
   port := "3333"
 
   server, err := net.Listen("tcp", ":"+port)
   if err != nil { }
 
-  splitter := Splitter{} // Bring your friends
-  AddPesterBot(&splitter)    // Have a robot friend
+  splitter := Splitter{}
+  AddPesterBot(&splitter)
 
   for {
     conn, err := server.Accept()
@@ -25,21 +27,16 @@ func main() {
 
 //------------------------------
 // Have a robot friend
-type Robot struct {
-  Chum
-  horse horse.Horse
-}
-
 func AddPesterBot(splitter *Splitter) {
   robot      := PesterChum(splitter)
   this_horse := horse.NewHorse()
 
-  go robot.ReadSplitter(func(msg string){
+  go robot.Read(func(msg string){
     neigh := this_horse.Respond(msg)
     if len(neigh) > 0 {
-      formatted_neigh := "⊚ " + neigh
-      // go robot.WriteString(formatted_neigh)
-      go fmt.Fprintln(robot, formatted_neigh) //confident Go
+      horse_says := "⊚ " + neigh
+      go fmt.Fprintln(robot, horse_says) //confident Go
+      fmt.Println(horse_says)
     }
   })
 }
@@ -55,12 +52,6 @@ func (chum *Chum) Write (message_bytes []byte) (int, error){
 
 //------------------------------
 // Bring your friends to the party
-type Chum struct {
-  split_id      int
-  splitter      *Splitter
-  from_splitter chan string
-}
-
 func PesterChum(splitter *Splitter) (chum *Chum) {
   chum                              = &Chum{}
   chum.splitter                     = splitter
@@ -69,15 +60,15 @@ func PesterChum(splitter *Splitter) (chum *Chum) {
 }
 
 func (chum *Chum) Join(conn net.Conn) {
-  go chum.ReadSplitter(func(msg string){
+  go chum.Read(func(msg string){
     fmt.Fprint(conn, msg)
   })
 
   for {
     reader  := bufio.NewReader(conn)
     line, _ := reader.ReadString('\n')
-    chum.WriteString(line)
     fmt.Print(line)
+    chum.WriteString(line)
   }
 }
 
@@ -88,14 +79,16 @@ func (chum *Chum) WriteString(message string) {
   }
 }
 
-func (chum *Chum) ReadSplitter(block func(msg string)) {
+func (chum *Chum) Read(block func(msg string)) {
   for msg := range chum.from_splitter {
     block(msg)
   }
 }
 
-type Splitter struct {
-  splits []chan string
+type Chum struct {
+  split_id      int
+  splitter      *Splitter
+  from_splitter chan string
 }
 
 func (s *Splitter) Split() (split_id int, from_splitter chan string) {
@@ -103,16 +96,9 @@ func (s *Splitter) Split() (split_id int, from_splitter chan string) {
 
   s.splits = append(s.splits, from_splitter)
   split_id = len(s.splits) - 1
-  return
+  return // go knows to return `split_id` and `from_splitter`
 }
 
-// ------------------------------
-// BoRiNg
-// func handle(conn net.Conn) {
-//   for {
-//     reader  := bufio.NewReader(conn)
-//     line, _ := reader.ReadString('\n')
-//     fmt.Print(line)
-//     fmt.Fprintln(conn, "HI")
-//   }
-// }
+type Splitter struct {
+  splits []chan string
+}
