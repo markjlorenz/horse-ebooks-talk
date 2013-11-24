@@ -2,7 +2,6 @@ package main
 
 import (
   "net"
-  "bufio"
   "fmt"
 )
 
@@ -27,6 +26,7 @@ func main() {
 // Bring your friends to the party
 func PesterChum(splitter *Splitter) (chum *Chum) {
   chum                              = &Chum{}
+  chum.MaxMessage                   = 4096
   chum.splitter                     = splitter
   chum.split_id, chum.from_splitter = splitter.Split()
   return // go knows to return `chum`
@@ -38,8 +38,11 @@ func (chum *Chum) Join(conn net.Conn) {
   })
 
   for {
-    reader  := bufio.NewReader(conn)
-    line, _ := reader.ReadString('\n')
+    buf    := make([]byte, chum.MaxMessage)
+    n, err := conn.Read(buf)
+    if err != nil { return } // don't go tight loop if the client disconnects
+    line   := string(buf[0:n])
+
     fmt.Print(line)
     chum.WriteString(line)
   }
@@ -62,6 +65,7 @@ type Chum struct {
   split_id      int
   splitter      *Splitter
   from_splitter chan string
+  MaxMessage    int
 }
 
 func (s *Splitter) Split() (split_id int, from_splitter chan string) {

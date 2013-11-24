@@ -2,7 +2,6 @@ package main
 
 import (
   "net"
-  "bufio"
   "fmt"
   "./horse"
 )
@@ -13,7 +12,7 @@ func main() {
   port := "3333"
 
   server, err := net.Listen("tcp", ":"+port)
-  if err != nil { }
+  if err != nil { panic(err) }
 
   splitter := Splitter{}
   AddPesterBot(&splitter)
@@ -28,8 +27,10 @@ func main() {
 //------------------------------
 // Have a robot friend
 func AddPesterBot(splitter *Splitter) {
-  robot      := PesterChum(splitter)
-  this_horse := horse.NewHorse()
+  robot                              := &Occupant{}
+  robot.splitter                      = splitter
+  robot.split_id, robot.from_splitter = splitter.Split()
+  this_horse                         := horse.NewHorse()
 
   go robot.Read(func(msg string){
     neigh := this_horse.Respond(msg)
@@ -41,10 +42,10 @@ func AddPesterBot(splitter *Splitter) {
   })
 }
 
-// Splitter is now an io.Writter
-func (chum *Chum) Write (message_bytes []byte) (int, error){
-  for split_id, out_pipe := range chum.splitter.splits {
-    if chum.split_id == split_id { continue }
+// Occupant is now an io.Writter
+func (occupant *Occupant) Write (message_bytes []byte) (int, error){
+  for split_id, out_pipe := range occupant.splitter.splits {
+    if occupant.split_id == split_id { continue }
     out_pipe <- string(message_bytes[:])
   }
   return len(message_bytes), nil
@@ -54,6 +55,7 @@ func (chum *Chum) Write (message_bytes []byte) (int, error){
 // Bring your friends to the party
 func PesterChum(splitter *Splitter) (chum *Chum) {
   chum                              = &Chum{}
+  chum.MaxMessage                   = 4096
   chum.splitter                     = splitter
   chum.split_id, chum.from_splitter = splitter.Split()
   return // go knows to return `chum`
@@ -65,27 +67,36 @@ func (chum *Chum) Join(conn net.Conn) {
   })
 
   for {
-    reader  := bufio.NewReader(conn)
-    line, _ := reader.ReadString('\n')
+    buf    := make([]byte, chum.MaxMessage)
+    n, err := conn.Read(buf)
+    if err != nil { return } // don't go tight loop if the client disconnects
+    line   := string(buf[0:n])
+
     fmt.Print(line)
     chum.WriteString(line)
   }
 }
 
-func (chum *Chum) WriteString(message string) {
-  for split_id, out_pipe := range chum.splitter.splits {
-    if chum.split_id == split_id { continue }
+func (occupant *Occupant) WriteString(message string) {
+  for split_id, out_pipe := range occupant.splitter.splits {
+    if occupant.split_id == split_id { continue }
     out_pipe <- message
   }
 }
 
-func (chum *Chum) Read(block func(msg string)) {
-  for msg := range chum.from_splitter {
+func (occupant *Occupant) Read(block func(msg string)) {
+  for msg := range occupant.from_splitter {
     block(msg)
   }
 }
 
+
 type Chum struct {
+  Occupant
+  MaxMessage    int  // I sure would like to default this
+}
+
+type Occupant struct {
   split_id      int
   splitter      *Splitter
   from_splitter chan string
