@@ -30,6 +30,7 @@ func NewHorse() Horse{
 }
 
 func (h Horse) Respond (str string) string {
+  if len(str) < 3 { return "" } // no shorties
   how_chatty := 7 //words
   reader     := bytes.NewBufferString(str)
   return h.chain.Generate(how_chatty, reader)
